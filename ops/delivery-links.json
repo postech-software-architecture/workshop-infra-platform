@@ -1,0 +1,15 @@
+{
+  "repositories": {
+    "os": null,
+    "billing": null,
+    "execution": null
+  },
+  "video": null,
+  "verified_remote_protection": false,
+  "verified_real_integration": false,
+  "verified_mercado_pago_test_account": false,
+  "verified_compensation": false,
+  "verified_cloud_rollout": false,
+  "expected_participants": 5,
+  "verified_complete_bdd": false
+}

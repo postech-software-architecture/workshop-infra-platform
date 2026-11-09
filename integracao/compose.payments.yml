@@ -1,0 +1,9 @@
+services:
+  billing:
+    environment:
+      PAYMENTS_ENABLED: 'true'
+      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN:?Configure test account first}
+      MP_SELLER_ID: ${MP_SELLER_ID:?Configure test account first}
+      MP_APPLICATION_ID: ${MP_APPLICATION_ID:?Configure test account first}
+      MP_POS_ID: ${MP_POS_ID:?Configure test account first}
+      MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:?Configure test account first}

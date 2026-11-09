@@ -1,0 +1,66 @@
+{
+  "apiVersion": "v1",
+  "kind": "ConfigMap",
+  "metadata": {
+    "name": "mongo-bootstrap"
+  },
+  "data": {
+    "init.js": "const c=new Mongo('mongodb://mongo:27017');\nconst admin=c.getDB('admin');\nadmin.auth('root',process.env.MONGO_ROOT_PASSWORD);\ntry { admin.runCommand({replSetGetStatus:1}); } catch(e) { if(e.code===94)admin.runCommand({replSetInitiate:{_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}});else throw e; }\nlet primary=false;\nfor(let i=0;i<60;i++){if(admin.runCommand({hello:1}).isWritablePrimary){primary=true;break;}sleep(500);}\nif(!primary)throw new Error('No primary');\nconst db=c.getDB('execution');\nif(!db.getUser('execution'))db.createUser({user:'execution',pwd:process.env.MONGO_PASSWORD,roles:[{role:'readWrite',db:'execution'}]});\n"
+  }
+}
+---
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "name": "mongo-bootstrap"
+  },
+  "spec": {
+    "backoffLimit": 5,
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "mongo-bootstrap"
+        }
+      },
+      "spec": {
+        "restartPolicy": "OnFailure",
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "name": "init",
+            "image": "mongo:7.0.45",
+            "command": [
+              "mongosh",
+              "--nodb",
+              "--quiet",
+              "/bootstrap/init.js"
+            ],
+            "envFrom": [
+              {
+                "secretRef": {
+                  "name": "mongo-secrets"
+                }
+              }
+            ],
+            "volumeMounts": [
+              {
+                "name": "init",
+                "mountPath": "/bootstrap",
+                "readOnly": true
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "init",
+            "configMap": {
+              "name": "mongo-bootstrap"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

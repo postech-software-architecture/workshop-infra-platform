@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fase4-edge
+data:
+  nginx.conf: "pid /tmp/nginx.pid;\nevents {}\nhttp {\n  access_log /dev/stdout;\n\
+    \  error_log /dev/stderr;\n  client_body_temp_path /tmp/client;\n  proxy_temp_path\
+    \ /tmp/proxy;\n  resolver __DNS__ valid=5s ipv6=off;\n  server {\n    listen 8080;\n\
+    \    location = /health { return 200 'ok'; }\n    location ~* (^|/)internal(/|$)\
+    \ { return 404; }\n    location /api/v1/orcamentos { set $backend billing-service:8080;\
+    \ proxy_pass http://$backend; }\n    location /api/v1/pagamentos { set $backend\
+    \ billing-service:8080; proxy_pass http://$backend; }\n    location /api/v1/operacoes-financeiras\
+    \ { set $backend billing-service:8080; proxy_pass http://$backend; }\n    location\
+    \ /api/v1/webhooks/mercado-pago { set $backend billing-service:8080; proxy_pass\
+    \ http://$backend; }\n    location /api/v1/trabalhos { set $backend execucao-service:8080;\
+    \ proxy_pass http://$backend; }\n    location ~ ^/api/(auth|public|v1/(ordens-servico|clientes|veiculos|servicos|pecas|estoques|usuarios))(/|$)\
+    \ {\n      set $backend os-service:8080; proxy_pass http://$backend;\n    }\n\
+    \    # Local port-forward preview keeps the same acceptance-script prefixes as\
+    \ Compose.\n    location /os/ { set $backend os-service:8080; rewrite ^/os/(.*)$\
+    \ /$1 break; proxy_pass http://$backend; }\n    location /billing/ { set $backend\
+    \ billing-service:8080; rewrite ^/billing/(.*)$ /$1 break; proxy_pass http://$backend;\
+    \ }\n    location /execution/ { set $backend execucao-service:8080; rewrite ^/execution/(.*)$\
+    \ /$1 break; proxy_pass http://$backend; }\n    location / { return 404; }\n \
+    \ }\n  server {\n    listen 8081;\n    location = /health { return 200 'ok'; }\n\
+    \    location = /internal/v1/identidade/por-cpf { set $backend os-service:8080;\
+    \ proxy_pass http://$backend; }\n    location / { return 404; }\n  }\n}\n"
