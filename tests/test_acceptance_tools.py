@@ -102,3 +102,19 @@ class ConfigureSecretsTest(unittest.TestCase):
         self.assertEqual(values['AUTH_SERVICE_TOKEN'],by_name['os-service-config']['AUTH_SERVICE_TOKEN'])
         with self.assertRaises(ValueError):secrets_module.build(dict(values,BILLING_DB_PASSWORD=values['OS_DB_PASSWORD']),'{}','key')
 
+class EdgeConfigTest(unittest.TestCase):
+    """The edge nginx runs with a read-only root and resolves backends through a variable proxy_pass."""
+    def config(self):
+        import yaml
+        return yaml.safe_load((ROOT/'k8s/overlays/academy/edge-config.yaml').read_text(encoding='utf-8'))['data']['nginx.conf']
+    def test_every_backend_is_a_cluster_fqdn(self):
+        # nginx 'resolver' ignores resolv.conf search domains, so short Service names fail with 502.
+        backends=set(re.findall(r'set \$backend ([^;]+);',self.config()))
+        self.assertTrue(backends)
+        for backend in backends:
+            self.assertRegex(backend,r'^[a-z-]+\.workshop\.svc\.cluster\.local:8080$')
+    def test_all_nginx_temp_paths_are_on_writable_tmp(self):
+        config=self.config()
+        for kind in ['client_body','proxy','fastcgi','uwsgi','scgi']:
+            self.assertRegex(config,kind+r'_temp_path /tmp/')
+        self.assertIn('pid /tmp/',config)

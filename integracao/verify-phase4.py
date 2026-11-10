@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import time
+import urllib.parse
 import urllib.request
 import urllib.error
 import uuid
@@ -47,6 +48,11 @@ def main():
     settings.update(os.environ)
     provider_token, seller = settings.get('MP_ACCESS_TOKEN'), settings.get('MP_SELLER_ID')
     require(bool(provider_token and seller), 'Real test-account MP_ACCESS_TOKEN and MP_SELLER_ID are required for independent proof')
+    # MP_BASE_URL points the independent proof at the local Orders API mock (compose.payments-mock.yml).
+    provider_url = settings.get('MP_BASE_URL', 'https://api.mercadopago.com').rstrip('/')
+    provider = urllib.parse.urlparse(provider_url)
+    require(provider.scheme == 'https' or (provider.scheme == 'http' and provider.hostname in ('127.0.0.1', 'localhost')),
+            'Provider URL must be HTTPS outside localhost')
 
     admin, mechanic = os.environ.get('ADMIN_ACCESS_TOKEN'), os.environ.get('MECHANIC_ACCESS_TOKEN')
     if not admin or not mechanic:
@@ -82,7 +88,7 @@ def main():
         current = api('GET', payment_route, admin)['pagamento']
         import re
         require(bool(re.fullmatch(r'[A-Za-z0-9_-]{1,128}', current['providerOrderId'])), 'Invalid provider identity')
-        request = urllib.request.Request('https://api.mercadopago.com/v1/orders/' + current['providerOrderId'], headers={'Authorization': 'Bearer ' + provider_token})
+        request = urllib.request.Request(provider_url + '/v1/orders/' + current['providerOrderId'], headers={'Authorization': 'Bearer ' + provider_token})
         with urllib.request.urlopen(request, timeout=6) as response:
             resource = json.load(response)
         return verify_provider(resource, current, seller, expected)

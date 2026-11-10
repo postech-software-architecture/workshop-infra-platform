@@ -116,7 +116,9 @@ jobs:
 
         kubectl apply -f /tmp/fase4-secrets.json
 
-        kubectl apply -f /tmp/platform.yaml'
+        kubectl apply -f /tmp/platform.yaml
+
+        kubectl rollout restart -n workshop deployment/fase4-edge'
     - name: Check bootstrap and rollout
       run: 'kubectl wait -n workshop --for=condition=complete job/fase4-rds-bootstrap
         --timeout=180s

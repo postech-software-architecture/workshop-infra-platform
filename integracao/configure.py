@@ -14,7 +14,7 @@ if 'AUTH_SERVICE_TOKEN' not in env:
 if 'DEMO_PASSWORD' not in env:
     env['DEMO_PASSWORD']=secrets.token_urlsafe(24)
     with envfile.open('a',encoding='utf-8') as f: f.write('\nDEMO_PASSWORD='+env['DEMO_PASSWORD']+'\n')
-write('.gitignore','.env\n*.env\n*.env.*\n!*.env.example\ngenerated/\nevidencias/\n')
+if not (BASE/'.gitignore').exists():write('.gitignore','.env\n*.env\n*.env.*\n!*.env.example\ngenerated/\nevidencias/\n')  # versioned copy is kept as-is
 if not (BASE/'generated/mongo-key').exists():write('generated/mongo-key',base64.b64encode(secrets.token_bytes(512)).decode())
 def pw(value):
     salt=secrets.token_bytes(4);return base64.b64encode(salt+hashlib.sha256(salt+value.encode()).digest()).decode()
