@@ -1,0 +1,15 @@
+.env
+*.env
+*.env.*
+!*.env.example
+private/
+secrets/
+reports/
+**/target/
+**/generated/
+**/evidencias/
+!docs/evidencias/
+*.tfvars
+*.tfstate*
+*.log
+__pycache__/

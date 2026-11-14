@@ -1,0 +1,5 @@
+services:
+  os:
+    environment:
+      SPRING_PROFILES_ACTIVE: demo
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?Run configure.py first}

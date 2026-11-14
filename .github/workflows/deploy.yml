@@ -1,0 +1,135 @@
+name: deploy-academy-platform
+'on':
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        required: true
+        type: string
+        description: Digite APLICAR PLATAFORMA FASE4
+permissions:
+  contents: read
+concurrency:
+  group: academy-platform
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    environment: prod
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - run: python -m pip install PyYAML==6.0.2
+    - uses: azure/setup-kubectl@v4
+    - name: Validate deployment confirmation
+      env:
+        CONFIRMATION: ${{ inputs.confirmation }}
+      run: test "$CONFIRMATION" = "APLICAR PLATAFORMA FASE4"
+    - uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+        aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+    - name: Select existing cluster
+      env:
+        CLUSTER: ${{ vars.EKS_CLUSTER_NAME }}
+      run: 'test -n "$CLUSTER"
+
+        aws sts get-caller-identity --query Account --output text
+
+        aws eks update-kubeconfig --name "$CLUSTER"'
+    - name: Render and preflight Academy platform
+      env:
+        RDS_HOST: ${{ vars.RDS_HOST }}
+        STORAGE_CLASS: ${{ vars.STORAGE_CLASS }}
+      run: python render-academy.py --rds-host "$RDS_HOST" --storage-class "$STORAGE_CLASS"
+        --check-cluster --output /tmp/platform.yaml
+    - name: Prepare private Secrets
+      env:
+        RDS_HOST: ${{ vars.RDS_HOST }}
+        RDS_ADMIN_USER: ${{ secrets.RDS_ADMIN_USER }}
+        RDS_ADMIN_PASSWORD: ${{ secrets.RDS_ADMIN_PASSWORD }}
+        OS_DB_PASSWORD: ${{ secrets.OS_DB_PASSWORD }}
+        BILLING_DB_PASSWORD: ${{ secrets.BILLING_DB_PASSWORD }}
+        JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        AUTH_SERVICE_TOKEN: ${{ secrets.AUTH_SERVICE_TOKEN }}
+        OS_SERVICE_TOKEN: ${{ secrets.OS_SERVICE_TOKEN }}
+        BILLING_SERVICE_TOKEN: ${{ secrets.BILLING_SERVICE_TOKEN }}
+        EXECUTION_SERVICE_TOKEN: ${{ secrets.EXECUTION_SERVICE_TOKEN }}
+        OS_RABBIT_PASSWORD: ${{ secrets.OS_RABBIT_PASSWORD }}
+        BILLING_RABBIT_PASSWORD: ${{ secrets.BILLING_RABBIT_PASSWORD }}
+        EXECUTION_RABBIT_PASSWORD: ${{ secrets.EXECUTION_RABBIT_PASSWORD }}
+        RABBIT_ADMIN_PASSWORD: ${{ secrets.RABBIT_ADMIN_PASSWORD }}
+        MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
+        MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
+        NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
+        MP_ACCESS_TOKEN: ${{ secrets.MP_ACCESS_TOKEN }}
+        MP_SELLER_ID: ${{ secrets.MP_SELLER_ID }}
+        MP_APPLICATION_ID: ${{ secrets.MP_APPLICATION_ID }}
+        MP_POS_ID: ${{ secrets.MP_POS_ID }}
+        MP_WEBHOOK_SECRET: ${{ secrets.MP_WEBHOOK_SECRET }}
+        MAIL_HOST: ${{ secrets.MAIL_HOST }}
+        MAIL_PORT: ${{ secrets.MAIL_PORT }}
+        MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+        MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+        MAIL_FROM: ${{ secrets.MAIL_FROM }}
+      shell: python
+      run: 'import os,subprocess,sys
+
+        from pathlib import Path
+
+        names = [''RDS_HOST'', ''RDS_ADMIN_USER'', ''RDS_ADMIN_PASSWORD'', ''OS_DB_PASSWORD'',
+        ''BILLING_DB_PASSWORD'', ''JWT_SECRET'', ''AUTH_SERVICE_TOKEN'', ''OS_SERVICE_TOKEN'',
+        ''BILLING_SERVICE_TOKEN'', ''EXECUTION_SERVICE_TOKEN'', ''OS_RABBIT_PASSWORD'',
+        ''BILLING_RABBIT_PASSWORD'', ''EXECUTION_RABBIT_PASSWORD'', ''RABBIT_ADMIN_PASSWORD'',
+        ''MONGO_ROOT_PASSWORD'', ''MONGO_PASSWORD'', ''NEW_RELIC_LICENSE_KEY'']
+
+        missing = [n for n in names if not os.environ.get(n)]
+
+        if missing: raise SystemExit(''Missing environment names: ''+'', ''.join(missing))
+
+        if any(''\n'' in os.environ[n] or ''\r'' in os.environ[n] for n in names):
+        raise SystemExit(''Multiline values are not supported in the private environment
+        file'')
+
+        # configure.py preserves values in an existing .env. This runner uses a fresh
+        checkout.
+
+        Path(''integracao/.env'').write_text(''''.join(n+''=''+os.environ[n]+''\n''
+        for n in names),encoding=''utf-8'')
+
+        subprocess.run([sys.executable,''integracao/configure.py''],check=True)
+
+        subprocess.run([sys.executable,''prepare-secrets.py'',''--definitions'',''integracao/generated/rabbit-definitions.json'',''--keyfile'',''integracao/generated/mongo-key'',''--output'',''/tmp/fase4-secrets.json''],check=True)
+
+        '
+    - name: Validate server-side
+      run: 'kubectl apply --dry-run=server -f /tmp/platform.yaml
+
+        kubectl apply --dry-run=server -f /tmp/fase4-secrets.json'
+    - name: Apply additive runtime resources
+      run: 'kubectl create namespace workshop --dry-run=client -o yaml | kubectl apply
+        -f -
+
+        kubectl apply -f /tmp/fase4-secrets.json
+
+        kubectl apply -f /tmp/platform.yaml
+
+        kubectl rollout restart -n workshop deployment/fase4-edge'
+    - name: Check bootstrap and rollout
+      run: 'kubectl wait -n workshop --for=condition=complete job/fase4-rds-bootstrap
+        --timeout=180s
+
+        kubectl wait -n workshop --for=condition=complete job/mongo-bootstrap --timeout=180s
+
+        kubectl wait -n workshop --for=condition=complete job/broker-bootstrap --timeout=180s
+
+        kubectl rollout status -n workshop deployment/fase4-edge --timeout=180s'
+    - name: Delete private runner files
+      if: always()
+      run: 'rm -f /tmp/fase4-secrets.json integracao/.env
+
+        rm -rf integracao/generated'

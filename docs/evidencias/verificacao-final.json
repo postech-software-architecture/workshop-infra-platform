@@ -1,0 +1,85 @@
+{
+  "date": "2026-11-07",
+  "scope": "Desenvolvimento local ate a fase 5; provas externas pendentes",
+  "docker_started": false,
+  "cloud_applied": false,
+  "real_provider_calls": false,
+  "services": {
+    "os": {
+      "tests": 377,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "coverage": {
+        "INSTRUCTION": 79.22,
+        "BRANCH": 71.84,
+        "LINE": 80.23,
+        "COMPLEXITY": 71.37,
+        "METHOD": 81.98,
+        "CLASS": 95.51
+      },
+      "bdd_scenarios": 1,
+      "build": "PASS",
+      "coverage_gate": "PASS",
+      "spotbugs_high_findings": 0
+    },
+    "billing": {
+      "tests": 102,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "coverage": {
+        "INSTRUCTION": 85.01,
+        "BRANCH": 66.44,
+        "LINE": 82.11,
+        "COMPLEXITY": 55.81,
+        "METHOD": 89.76,
+        "CLASS": 100.0
+      },
+      "bdd_scenarios": 1,
+      "build": "PASS",
+      "coverage_gate": "PASS",
+      "spotbugs_high_findings": 0
+    },
+    "execution": {
+      "tests": 76,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "coverage": {
+        "INSTRUCTION": 90.59,
+        "BRANCH": 77.19,
+        "LINE": 86.88,
+        "COMPLEXITY": 69.93,
+        "METHOD": 87.63,
+        "CLASS": 100.0
+      },
+      "bdd_scenarios": 1,
+      "build": "PASS",
+      "coverage_gate": "PASS",
+      "spotbugs_high_findings": 0
+    }
+  },
+  "support": {
+    "auth": {
+      "tests": 15,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "build": "PASS",
+      "persistence": "HTTP; sem driver/conexao JDBC"
+    }
+  },
+  "static_checks": {
+    "kustomize": "PASS_LOCAL_RENDER",
+    "kubernetes_objects": 41,
+    "terraform": "PASS_FMT_ONLY",
+    "message_contracts": "MATCH",
+    "producer_topic_permissions": "PASS",
+    "python_syntax": "PASS",
+    "auth_no_jdbc": "PASS",
+    "cloud_apply": "NOT_RUN"
+  },
+  "tests_total_services": 555,
+  "tests_total_including_auth": 570
+}

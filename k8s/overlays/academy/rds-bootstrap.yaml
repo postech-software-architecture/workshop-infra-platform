@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: fase4-rds-bootstrap}
+data:
+  bootstrap.sh: |
+    #!/bin/sh
+    set -eu
+    export PGSSLMODE=require
+    psql -v ON_ERROR_STOP=1 --set=os_password="$OS_APP_PASSWORD" --set=billing_password="$BILLING_APP_PASSWORD" <<'SQL'
+    SELECT format('CREATE ROLE os_fase4 LOGIN PASSWORD %L', :'os_password') WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname='os_fase4') \gexec
+    SELECT format('CREATE ROLE billing_fase4 LOGIN PASSWORD %L', :'billing_password') WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname='billing_fase4') \gexec
+    SELECT 'CREATE DATABASE os_fase4 OWNER os_fase4' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname='os_fase4') \gexec
+    SELECT 'CREATE DATABASE billing_fase4 OWNER billing_fase4' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname='billing_fase4') \gexec
+    DO $$ BEGIN
+      IF EXISTS (SELECT FROM pg_database d JOIN pg_roles r ON r.oid=d.datdba WHERE (d.datname='os_fase4' AND r.rolname<>'os_fase4') OR (d.datname='billing_fase4' AND r.rolname<>'billing_fase4')) THEN
+        RAISE EXCEPTION 'Refusing to adopt a database owned by another principal';
+      END IF;
+      IF EXISTS (SELECT FROM pg_roles WHERE rolname IN ('os_fase4','billing_fase4') AND (rolsuper OR rolcreaterole OR rolcreatedb)) THEN
+        RAISE EXCEPTION 'Application roles must not hold administrative privileges';
+      END IF;
+    END $$;
+    REVOKE CONNECT ON DATABASE os_fase4 FROM PUBLIC;
+    REVOKE CONNECT ON DATABASE billing_fase4 FROM PUBLIC;
+    GRANT CONNECT ON DATABASE os_fase4 TO os_fase4;
+    GRANT CONNECT ON DATABASE billing_fase4 TO billing_fase4;
+    SQL
+    # Do not silently rotate existing roles; fail if configured passwords do not authenticate.
+    PGUSER=os_fase4 PGDATABASE=os_fase4 PGPASSWORD="$OS_APP_PASSWORD" psql -v ON_ERROR_STOP=1 -c 'REVOKE CREATE ON SCHEMA public FROM PUBLIC; SELECT 1;'
+    PGUSER=billing_fase4 PGDATABASE=billing_fase4 PGPASSWORD="$BILLING_APP_PASSWORD" psql -v ON_ERROR_STOP=1 -c 'REVOKE CREATE ON SCHEMA public FROM PUBLIC; SELECT 1;'
+---
+apiVersion: batch/v1
+kind: Job
+metadata: {name: fase4-rds-bootstrap}
+spec:
+  backoffLimit: 1
+  template:
+    metadata: {labels: {app: fase4-rds-bootstrap}}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: psql
+          image: postgres:16.4
+          command: [sh, /scripts/bootstrap.sh]
+          envFrom: [{secretRef: {name: fase4-rds-bootstrap}}]
+          volumeMounts: [{name: scripts, mountPath: /scripts, readOnly: true}]
+          resources: {requests: {cpu: 25m, memory: 32Mi}, limits: {cpu: 250m, memory: 128Mi}}
+      volumes: [{name: scripts, configMap: {name: fase4-rds-bootstrap}}]

@@ -1,0 +1,110 @@
+{
+  "apiVersion": "v1",
+  "kind": "ConfigMap",
+  "metadata": {
+    "name": "otel-settings"
+  },
+  "data": {
+    "collector.yaml": "receivers:\n  otlp:\n    protocols:\n      grpc: {endpoint: \"0.0.0.0:4317\"}\n      http: {endpoint: \"0.0.0.0:4318\"}\nprocessors:\n  batch: {}\nexporters:\n  otlphttp/newrelic:\n    endpoint: ${env:NEW_RELIC_OPENTELEMETRY_ENDPOINT}\n    headers: {api-key: \"${env:NEW_RELIC_LICENSE_KEY}\"}\nservice:\n  pipelines:\n    traces: {receivers: [otlp], processors: [batch], exporters: [otlphttp/newrelic]}\n    metrics: {receivers: [otlp], processors: [batch], exporters: [otlphttp/newrelic]}\n    logs: {receivers: [otlp], processors: [batch], exporters: [otlphttp/newrelic]}\n"
+  }
+}
+---
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "otel"
+  },
+  "spec": {
+    "selector": {
+      "app": "otel"
+    },
+    "ports": [
+      {
+        "name": "otlp-http",
+        "port": 4318,
+        "targetPort": 4318
+      },
+      {
+        "name": "otlp-grpc",
+        "port": 4317,
+        "targetPort": 4317
+      }
+    ]
+  }
+}
+---
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "name": "otel"
+  },
+  "spec": {
+    "replicas": 1,
+    "selector": {
+      "matchLabels": {
+        "app": "otel"
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "otel"
+        }
+      },
+      "spec": {
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "name": "collector",
+            "image": "otel/opentelemetry-collector:0.111.0",
+            "args": [
+              "--config=/etc/otel/collector.yaml"
+            ],
+            "envFrom": [
+              {
+                "secretRef": {
+                  "name": "newrelic-otel"
+                }
+              }
+            ],
+            "ports": [
+              {
+                "containerPort": 4318
+              },
+              {
+                "containerPort": 4317
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "128Mi"
+              },
+              "limits": {
+                "cpu": "500m",
+                "memory": "384Mi"
+              }
+            },
+            "volumeMounts": [
+              {
+                "name": "settings",
+                "mountPath": "/etc/otel",
+                "readOnly": true
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "settings",
+            "configMap": {
+              "name": "otel-settings"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

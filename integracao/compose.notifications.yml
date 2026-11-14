@@ -1,0 +1,9 @@
+services:
+  billing:
+    environment:
+      NOTIFICATIONS_ENABLED: 'true'
+      MAIL_HOST: ${MAIL_HOST:?Configure SMTP first}
+      MAIL_PORT: ${MAIL_PORT:?Configure SMTP first}
+      MAIL_USERNAME: ${MAIL_USERNAME:?Configure SMTP first}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:?Configure SMTP first}
+      MAIL_FROM: ${MAIL_FROM:?Configure SMTP first}

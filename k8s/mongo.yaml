@@ -1,0 +1,156 @@
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "mongo"
+  },
+  "spec": {
+    "selector": {
+      "app": "mongo"
+    },
+    "ports": [
+      {
+        "port": 27017,
+        "targetPort": 27017
+      }
+    ],
+    "clusterIP": "None"
+  }
+}
+---
+{
+  "apiVersion": "apps/v1",
+  "kind": "StatefulSet",
+  "metadata": {
+    "name": "mongo"
+  },
+  "spec": {
+    "replicas": 1,
+    "serviceName": "mongo",
+    "selector": {
+      "matchLabels": {
+        "app": "mongo"
+      }
+    },
+    "template": {
+      "metadata": {
+        "labels": {
+          "app": "mongo"
+        }
+      },
+      "spec": {
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "name": "mongo",
+            "image": "mongo:7.0.45",
+            "ports": [
+              {
+                "containerPort": 27017
+              }
+            ],
+            "envFrom": [
+              {
+                "secretRef": {
+                  "name": "mongo-secrets"
+                }
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "100m",
+                "memory": "256Mi"
+              },
+              "limits": {
+                "cpu": "1",
+                "memory": "1Gi"
+              }
+            },
+            "volumeMounts": [
+              {
+                "name": "data",
+                "mountPath": "/data/db"
+              },
+              {
+                "name": "key",
+                "mountPath": "/key",
+                "readOnly": true
+              }
+            ],
+            "startupProbe": {
+              "tcpSocket": {
+                "port": 27017
+              },
+              "failureThreshold": 60,
+              "periodSeconds": 5
+            },
+            "readinessProbe": {
+              "tcpSocket": {
+                "port": 27017
+              }
+            },
+            "args": [
+              "--replSet",
+              "rs0",
+              "--bind_ip_all",
+              "--auth",
+              "--keyFile",
+              "/key/keyfile"
+            ]
+          }
+        ],
+        "initContainers": [
+          {
+            "name": "key-permissions",
+            "image": "busybox:1.36",
+            "command": [
+              "sh",
+              "-c",
+              "cp /source/keyfile /key/keyfile && chown 999:999 /key/keyfile && chmod 400 /key/keyfile"
+            ],
+            "volumeMounts": [
+              {
+                "name": "key-source",
+                "mountPath": "/source",
+                "readOnly": true
+              },
+              {
+                "name": "key",
+                "mountPath": "/key"
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "key-source",
+            "secret": {
+              "secretName": "mongo-key"
+            }
+          },
+          {
+            "name": "key",
+            "emptyDir": {}
+          }
+        ]
+      }
+    },
+    "volumeClaimTemplates": [
+      {
+        "metadata": {
+          "name": "data"
+        },
+        "spec": {
+          "accessModes": [
+            "ReadWriteOnce"
+          ],
+          "resources": {
+            "requests": {
+              "storage": "10Gi"
+            }
+          }
+        }
+      }
+    ]
+  }
+}
