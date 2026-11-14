@@ -9,7 +9,7 @@ do Academy e o Environment `prod`. O GitHub CLI autenticado é necessário para 
 | Credencial | Fonte | Consumidores |
 |---|---|---|
 | AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN | Organization secrets, acesso `selected` | Kubernetes, Database, Platform, Auth, OS, Billing e Execution |
-| NEW_RELIC_LICENSE_KEY | Organization secret, acesso `selected` | Kubernetes e Platform |
+| NEW_RELIC_LICENSE_KEY | Organization secret, acesso `selected` | Kubernetes, Platform e Auth |
 | Senhas SQL/Rabbit/Mongo e tokens de aplicação | Environment `prod` da Platform | Kubernetes Secrets de cada aplicação |
 | MP_* e MAIL_* | Environment `prod` da Platform | Secret do Billing |
 | JWT_SECRET e AUTH_SERVICE_TOKEN | Fonte privada original da Platform | Também serão necessários no Auth durante sua implantação |
