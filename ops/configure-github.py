@@ -15,7 +15,7 @@ AWS_REPOS = ('workshop-infra-kubernetes', 'workshop-infra-database', PLATFORM,
              'workshop-billing-service', 'workshop-execution-service')
 SHARED = {name: AWS_REPOS for name in
           ('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN')}
-SHARED['NEW_RELIC_LICENSE_KEY'] = ('workshop-infra-kubernetes', PLATFORM)
+SHARED['NEW_RELIC_LICENSE_KEY'] = ('workshop-infra-kubernetes', PLATFORM, 'workshop-auth-serverless')
 GENERATED = ('OS_DB_PASSWORD', 'BILLING_DB_PASSWORD', 'JWT_SECRET',
              'AUTH_SERVICE_TOKEN', 'OS_SERVICE_TOKEN', 'BILLING_SERVICE_TOKEN',
              'EXECUTION_SERVICE_TOKEN', 'OS_RABBIT_PASSWORD',
