@@ -63,7 +63,7 @@ class ConfigureSecretsTest(unittest.TestCase):
         import yaml,shutil
         from unittest.mock import patch
         workflow=yaml.safe_load((ROOT/'.github/workflows/deploy.yml').read_text(encoding='utf-8'))
-        code=next(step['run'] for step in workflow['jobs']['deploy']['steps'] if step.get('shell')=='python')
+        code=next(step['run'] for step in workflow['jobs']['deploy']['steps'] if step.get('name')=='Prepare private Secrets')
         names=['RDS_ADMIN_USER','RDS_ADMIN_PASSWORD','OS_DB_PASSWORD','BILLING_DB_PASSWORD','JWT_SECRET','AUTH_SERVICE_TOKEN','OS_SERVICE_TOKEN','BILLING_SERVICE_TOKEN','EXECUTION_SERVICE_TOKEN','OS_RABBIT_PASSWORD','BILLING_RABBIT_PASSWORD','EXECUTION_RABBIT_PASSWORD','RABBIT_ADMIN_PASSWORD','MONGO_ROOT_PASSWORD','MONGO_PASSWORD','NEW_RELIC_LICENSE_KEY']
         env={name:name+'-dummy-value-32-characters-or-more' for name in names};env['RDS_HOST']='sample.private.rds.amazonaws.com'
         if 'SYSTEMROOT' in os.environ:env['SYSTEMROOT']=os.environ['SYSTEMROOT']
