@@ -1,5 +1,7 @@
 # Plataforma da Fase 4 — AWS Academy
 
+Para configurar credenciais uma única vez, usar o [guia de centralização e cadastro automatizado](docs/SECRETS.md). AWS e New Relic podem vir dos Secrets da organização; senhas e tokens de runtime são gerados localmente e publicados pelo CLI, sem copiá-los para os repos dos serviços.
+
 A plataforma prepara somente recursos runtime adicionais no EKS existente, sem criar IAM/VPC/EKS/RDS. O uso anterior permanece nos seus states. OS e Billing recebem bancos lógicos/usuários separados no RDS atual, com bootstrap restrito, sem substituir a instância nem migrar dados antigos. Mongo e Rabbit têm PVCs de uma réplica usando StorageClass já operacional; não se presume suporte a CSI/IAM que o lab não forneça.
 
 A borda usa um NLB interno novo e proxy com listeners separados: 80 para negócio e 8081 para identidade privada. Não requer ingress-nginx. O API Gateway/VPC Link existente ganha rotas específicas somente mediante corte explícito no repo auth; o fallback antigo é preservado.
