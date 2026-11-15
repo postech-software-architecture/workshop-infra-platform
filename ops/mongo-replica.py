@@ -7,7 +7,7 @@ import sys
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-INSPECT = "const c=new Mongo('mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=5000'); const a=c.getDB('admin'); a.auth('root',process.env.MONGO_ROOT_PASSWORD||process.env.MONGO_INITDB_ROOT_PASSWORD); let s; try{s=a.runCommand({replSetGetStatus:1})}catch(e){s={ok:0,code:e.code,codeName:e.codeName}}; const h=a.runCommand({hello:1}); const cfg=c.getDB('local').getCollection('system.replset').findOne(); print(JSON.stringify({primary:h.isWritablePrimary===true,setName:h.setName,statusCode:s.code||0,statusOk:s.ok,configurationPresent:!!cfg,members:cfg?cfg.members.map(m=>m.host):[]}));"
+INSPECT = "const c=new Mongo('mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=5000'); const a=c.getDB('admin'); a.auth('root',process.env.MONGO_ROOT_PASSWORD||process.env.MONGO_INITDB_ROOT_PASSWORD); let s; try{s=a.runCommand({replSetGetStatus:1})}catch(e){s={ok:0,code:e.code,codeName:e.codeName,errmsg:e.message}}; const h=a.runCommand({hello:1}); const cfg=c.getDB('local').getCollection('system.replset').findOne(); print(JSON.stringify({primary:h.isWritablePrimary===true,setName:h.setName,statusCode:s.code||0,statusOk:s.ok,stateError:s.errmsg,configurationPresent:!!cfg,configurationName:cfg?cfg._id:null,members:cfg?cfg.members.map(m=>m.host):[]}));"
 
 
 def kube(*args, input=None):
@@ -31,15 +31,22 @@ def execute(script):
     raise ValueError('No structured Mongo result; private output suppressed')
 
 
+def dns_recovery_allowed(state):
+    return (state['statusCode'] == 93 and state['configurationPresent']
+            and state['configurationName'] == 'rs0' and state['members'] == ['mongo:27017'])
+
+
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--operation', choices=('inspect', 'bootstrap'), default='inspect')
+    p.add_argument('--operation', choices=('inspect', 'bootstrap', 'recover_dns'), default='inspect')
     operation = p.parse_args().operation
     before = execute(INSPECT)
     print(json.dumps({'before': before}), flush=True)
     if operation == 'inspect':
         return
-    if not before['primary'] and (before['statusCode'] != 94 or before['configurationPresent']):
+    if operation == 'recover_dns' and not dns_recovery_allowed(before):
+        raise ValueError('DNS recovery is restricted to the existing single-member rs0 alias configuration')
+    if operation == 'bootstrap' and not before['primary'] and (before['statusCode'] != 94 or before['configurationPresent']):
         raise ValueError('Only absent replica configuration may be initialized; no force/reconfiguration allowed')
     docs = list(yaml.safe_load_all(kube('kustomize', str(ROOT / 'k8s/overlays/academy'))))
     selected = [d for d in docs if (d['kind'], d['metadata']['name']) in
@@ -48,17 +55,20 @@ def main():
         raise ValueError('Unexpected manifest scope')
     kube('apply', '--dry-run=server', '-f', '-', input=yaml.safe_dump_all(selected))
     kube('apply', '-f', '-', input=yaml.safe_dump_all(selected))
-    script = next(d for d in selected if d['kind'] == 'ConfigMap')['data']['init.js']
-    print(json.dumps({'bootstrap': execute(script)}), flush=True)
-    after = execute(INSPECT)
-    if not after['primary']:
-        raise ValueError('Writable primary not confirmed')
-    print(json.dumps({'after': after}), flush=True)
+    if operation == 'bootstrap':
+        script = next(d for d in selected if d['kind'] == 'ConfigMap')['data']['init.js']
+        print(json.dumps({'bootstrap': execute(script)}), flush=True)
     sts = next(d for d in docs if d['kind'] == 'StatefulSet' and d['metadata']['name'] == 'mongo')
     probe = sts['spec']['template']['spec']['containers'][0]['readinessProbe']
-    patch = [{'op': 'replace', 'path': '/spec/template/spec/containers/0/readinessProbe', 'value': probe}]
+    patch = [{'op': 'replace', 'path': '/spec/template/spec/containers/0/readinessProbe', 'value': probe},
+             {'op': 'replace', 'path': '/spec/template/spec/initContainers',
+              'value': sts['spec']['template']['spec']['initContainers']}]
     kube('patch', 'statefulset', 'mongo', '--type=json', '-p', json.dumps(patch))
     print(kube('rollout', 'status', 'statefulset/mongo', '--timeout=300s'), flush=True)
+    after = execute(INSPECT)
+    if not after['primary']:
+        raise ValueError('Writable primary not confirmed; no replica reconfiguration performed')
+    print(json.dumps({'after': after}), flush=True)
     kube('rollout', 'restart', 'deployment/execucao-service')
     print(kube('rollout', 'status', 'deployment/execucao-service', '--timeout=300s'), flush=True)
     print(kube('get', 'deployments,statefulsets,pvc', '-o', 'wide'), flush=True)
