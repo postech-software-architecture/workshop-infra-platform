@@ -14,7 +14,8 @@
         "targetPort": 27017
       }
     ],
-    "clusterIP": "None"
+    "clusterIP": "None",
+    "publishNotReadyAddresses": true
   }
 }
 ---
@@ -85,9 +86,17 @@
               "periodSeconds": 5
             },
             "readinessProbe": {
-              "tcpSocket": {
-                "port": 27017
-              }
+              "exec": {
+                "command": [
+                  "mongosh",
+                  "--nodb",
+                  "--quiet",
+                  "--eval",
+                  "const c=new Mongo('mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000');const a=c.getDB('admin');a.auth('root',process.env.MONGO_ROOT_PASSWORD);quit(a.runCommand({hello:1}).isWritablePrimary?0:1);"
+                ]
+              },
+              "periodSeconds": 5,
+              "timeoutSeconds": 5
             },
             "args": [
               "--replSet",

@@ -1,0 +1,55 @@
+name: Validate and complete Mongo replica
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options: [inspect, bootstrap]
+        default: inspect
+        required: true
+      confirmation:
+        description: Para bootstrap, digite CONFIGURAR REPLICA MONGO
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: academy-platform
+  cancel-in-progress: false
+jobs:
+  mongo:
+    if: github.ref == 'refs/heads/main'
+    environment: prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install PyYAML==6.0.2
+      - name: Validate confirmation
+        env:
+          OPERATION: ${{ inputs.operation }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          if [ "$OPERATION" = bootstrap ]; then
+            test "$CONFIRMATION" = 'CONFIGURAR REPLICA MONGO'
+          fi
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - uses: azure/setup-kubectl@v4
+      - name: Select cluster
+        env:
+          CLUSTER: ${{ vars.EKS_CLUSTER_NAME }}
+        run: |
+          test "$CLUSTER" = workshop-eks
+          aws eks update-kubeconfig --name "$CLUSTER"
+      - name: Inspect or complete absent replica configuration
+        env:
+          OPERATION: ${{ inputs.operation }}
+        run: python -u ops/mongo-replica.py --operation "$OPERATION"
