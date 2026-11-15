@@ -1,0 +1,47 @@
+name: Export encrypted Postman demo environment
+on:
+  workflow_dispatch:
+    inputs:
+      recipient_public_key:
+        description: RSA public key PEM (3072 bits or greater); private key stays on the requester's machine
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: academy-platform
+  cancel-in-progress: false
+jobs:
+  export-demo:
+    if: github.ref == 'refs/heads/main'
+    environment: prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - uses: azure/setup-kubectl@v4
+      - name: Select existing Academy cluster
+        env:
+          CLUSTER: ${{ vars.EKS_CLUSTER_NAME }}
+        run: |
+          test "$CLUSTER" = workshop-eks
+          aws eks update-kubeconfig --name "$CLUSTER"
+      - name: Encrypt existing demo credentials for local import
+        env:
+          RECIPIENT_PUBLIC_KEY: ${{ inputs.recipient_public_key }}
+        run: node ops/export-demo-postman.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-demo-environment
+          path: encrypted-export/*.json
+          retention-days: 1
+          if-no-files-found: error
