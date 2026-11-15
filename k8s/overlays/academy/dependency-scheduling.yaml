@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbit
+spec:
+  template:
+    spec:
+      priorityClassName: workshop-data-dependencies
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+spec:
+  template:
+    spec:
+      priorityClassName: workshop-data-dependencies

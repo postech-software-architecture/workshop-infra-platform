@@ -1,0 +1,49 @@
+name: Recover Academy dependency scheduling
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Digite RECUPERAR DEPENDENCIAS FASE4
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: academy-platform
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: github.ref == 'refs/heads/main'
+    environment: prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: test "$CONFIRMATION" = 'RECUPERAR DEPENDENCIAS FASE4'
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - uses: azure/setup-kubectl@v4
+      - name: Select existing cluster
+        env:
+          CLUSTER: ${{ vars.EKS_CLUSTER_NAME }}
+        run: |
+          test "$CLUSTER" = workshop-eks
+          aws eks update-kubeconfig --name "$CLUSTER"
+          kubectl wait --for=condition=Ready nodes --all --timeout=60s
+      - name: Apply dependency priority and recover existing StatefulSets
+        run: |
+          kubectl apply --dry-run=server -f k8s/overlays/academy/dependency-priority.yaml
+          kubectl apply -f k8s/overlays/academy/dependency-priority.yaml
+          python3 -u ops/recover-dependencies.py
+      - name: Show runtime health
+        if: always()
+        run: |
+          kubectl -n workshop get deployments,statefulsets,pods,pvc -o wide
+          kubectl -n workshop get events --field-selector type=Warning --sort-by=.lastTimestamp | tail -n 15
