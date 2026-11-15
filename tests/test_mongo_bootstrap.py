@@ -1,4 +1,5 @@
 import json
+import importlib.util
 from pathlib import Path
 import subprocess
 import unittest
@@ -15,6 +16,16 @@ def evaluate(**scenario):
 
 
 class MongoBootstrapTest(unittest.TestCase):
+    def test_dns_recovery_is_limited_to_expected_existing_single_member(self):
+        spec = importlib.util.spec_from_file_location('replica', ROOT / 'ops/mongo-replica.py')
+        replica = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(replica)
+        state = dict(statusCode=93, configurationPresent=True, configurationName='rs0', members=['mongo:27017'])
+        self.assertTrue(replica.dns_recovery_allowed(state))
+        for override in (dict(statusCode=94), dict(configurationPresent=False),
+                         dict(configurationName='other'), dict(members=['other:27017'])):
+            self.assertFalse(replica.dns_recovery_allowed(dict(state, **override)))
+
     def test_only_absent_configuration_is_initialized_and_user_created(self):
         for throws in (False, True):
             result = evaluate(code=94, throwStatus=throws, existing=False, primary=True, user=False)
@@ -44,6 +55,9 @@ class MongoBootstrapTest(unittest.TestCase):
         probe = docs[1]['spec']['template']['spec']['containers'][0]['readinessProbe']
         self.assertNotIn('tcpSocket', probe)
         self.assertIn('isWritablePrimary', probe['exec']['command'][-1])
+        init = docs[1]['spec']['template']['spec']['initContainers'][0]
+        self.assertEqual('wait-for-own-dns', init['name'])
+        self.assertIn('POD_IP', init['command'][-1])
 
 
 if __name__ == '__main__':

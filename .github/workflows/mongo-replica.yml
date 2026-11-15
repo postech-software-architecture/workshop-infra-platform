@@ -4,11 +4,11 @@ on:
     inputs:
       operation:
         type: choice
-        options: [inspect, bootstrap]
+        options: [inspect, bootstrap, recover_dns]
         default: inspect
         required: true
       confirmation:
-        description: Para bootstrap, digite CONFIGURAR REPLICA MONGO
+        description: CONFIGURAR REPLICA MONGO para bootstrap; RECUPERAR DNS MONGO para recover_dns
         required: false
         type: string
 permissions:
@@ -33,7 +33,9 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
-          if [ "$OPERATION" = bootstrap ]; then
+          if [ "$OPERATION" = recover_dns ]; then
+            test "$CONFIRMATION" = 'RECUPERAR DNS MONGO'
+          elif [ "$OPERATION" = bootstrap ]; then
             test "$CONFIRMATION" = 'CONFIGURAR REPLICA MONGO'
           fi
       - uses: aws-actions/configure-aws-credentials@v4
