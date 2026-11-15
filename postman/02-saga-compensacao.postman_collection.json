@@ -1,0 +1,1917 @@
+{
+  "info": {
+    "_postman_id": "ef712c3c-a25c-5860-a761-ba525e673fc6",
+    "name": "SOAT4 02 - Saga e compensacao antes do pagamento",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Cenário independente, com orçamento e reserva reais. Cancela pela OS, comprova cancelamento técnico, orçamento encerrado e devolução única de estoque. Não equivale a estorno de pagamento."
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.environment.get(\"base_url\")) { throw new Error(\"Selecione o environment SOAT Fase 4\"); }",
+          "if (!pm.environment.get(\"trace_id\")) pm.environment.set(\"trace_id\", pm.variables.replaceIn(\"{{$guid}}\").replace(/-/g,\"\"));",
+          "pm.environment.set(\"traceparent\", \"00-\"+pm.environment.get(\"trace_id\")+\"-\"+pm.variables.replaceIn(\"{{$guid}}\").replace(/-/g,\"\").slice(0,16)+\"-01\");"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Autenticacao dos tres perfis",
+      "description": "Credenciais de demonstração: environment privado; nenhum token é assinado artificialmente.",
+      "item": [
+        {
+          "id": "d80761d9-7d5f-5aae-bd37-72ba3c99c787",
+          "name": "01 Login demo-admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"demo-admin\",\n  \"password\": \"{{demo_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "for (const key of [\"cancel_os_id\",\"cancel_work_id\",\"cancel_budget_id\",\"cancel_payment_id\"]) pm.environment.unset(key);",
+                  "pm.environment.set(\"cancel_run_id\", pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.environment.set('trace_id',pm.variables.replaceIn('{{$guid}}').replace(/-/g,''));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Token recebido', !!data.accessToken);",
+                  "pm.environment.set(\"admin_token\",data.accessToken);",
+                  "pm.environment.set(\"admin_token_refresh\",data.refreshToken);",
+                  "const claims=JSON.parse(atob(data.accessToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));",
+                  "check('JWT com emissor e prazo corretos',claims.iss==='workshop-auth' && claims.exp>Date.now()/1000);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "8c1e2674-6d51-5e76-837d-3012bdaa10e1",
+          "name": "02 Login demo-mecanico",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/login",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"demo-mecanico\",\n  \"password\": \"{{demo_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Token recebido', !!data.accessToken);",
+                  "pm.environment.set(\"mechanic_token\",data.accessToken);",
+                  "pm.environment.set(\"mechanic_token_refresh\",data.refreshToken);",
+                  "const claims=JSON.parse(atob(data.accessToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));",
+                  "check('JWT com emissor e prazo corretos',claims.iss==='workshop-auth' && claims.exp>Date.now()/1000);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "127ea6b4-35d8-59f1-b91a-dd7585b8209f",
+          "name": "03 Login cliente pelo Auth CPF",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/auth/cpf",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"{{customer_cpf}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Bearer recebido',data.tokenType==='Bearer' && !!data.accessToken); pm.environment.set('customer_token',data.accessToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - OS, diagnostico, estoque e orcamento",
+      "description": "OS real, mensagens reais, bancos reais; nenhuma mensagem financeira é injetada. Cada nova execução cria uma OS identificada.",
+      "item": [
+        {
+          "id": "b5f954b8-2995-5c92-9c63-be6ddae45be4",
+          "name": "01 Registrar saldo inicial de estoque",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/estoques/{{stock_id}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "pm.environment.set('cancel_stock_before',Number(data.quantidade)); check('Saldo suficiente',Number(data.quantidade)>=5);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "666b00d9-30a7-599d-b521-3e57e5df38ba",
+          "name": "02 Abrir OS e capturar correlacao",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cancel_open_key}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clienteDocumento\": \"{{customer_cpf}}\",\n  \"veiculoPlaca\": \"{{vehicle_plate}}\",\n  \"observacoes\": \"Postman SOAT4 cancel {{cancel_run_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('cancel_open_key',pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [202]\", [202].includes(code));",
+                  "",
+                  "check('OS com tentativa e trabalho',!!data.id && !!data.attemptId && !!data.trabalhoId);",
+                  "pm.environment.set('cancel_os_id',data.id);pm.environment.set('cancel_attempt_id',data.attemptId);",
+                  "pm.environment.set('cancel_work_id',data.trabalhoId);pm.environment.set('cancel_os_number',data.numero);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "c081d7ad-2dd5-5b43-b677-4118df303232",
+          "name": "03 Repetir abertura sem duplicar OS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cancel_open_key}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clienteDocumento\": \"{{customer_cpf}}\",\n  \"veiculoPlaca\": \"{{vehicle_plate}}\",\n  \"observacoes\": \"Postman SOAT4 cancel {{cancel_run_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [202]\", [202].includes(code));",
+                  "check('Mesma OS',data.id===pm.environment.get('cancel_os_id'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "987712eb-4eaa-57f7-a6e3-4d2fe49091cc",
+          "name": "04 Mesma chave com payload diferente deve falhar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cancel_open_key}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clienteDocumento\": \"{{customer_cpf}}\",\n  \"veiculoPlaca\": \"{{vehicle_plate}}\",\n  \"observacoes\": \"payload conflitante\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [409]\", [409].includes(code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "6a6763c6-30cb-5981-a35a-03ee750face5",
+          "name": "05 Aguardar diagnostico em Execucao",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/trabalhos/{{cancel_work_id}}",
+            "description": "Consistência eventual: o Runner repete esta consulta com limite; Send isolado não encadeia requests.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mechanic_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "",
+                  "check('HTTP de consulta assincrona',code===200 || code===404);",
+                  "const ready=code===200 && (data.status==='DIAGNOSTICO_PENDENTE');",
+                  "const key='poll_'+pm.info.requestId;",
+                  "if (!ready) {",
+                  " const count=Number(pm.environment.get(key)||0)+1;",
+                  " pm.environment.set(key,count);",
+                  " check('Convergencia em ate 90 consultas',count<=90);",
+                  " pm.execution.setNextRequest(pm.info.requestId); setTimeout(function(){},800);",
+                  "} else { pm.environment.unset(key); check('Estado esperado confirmado',true); ",
+                  "check('Mesmo contexto entre OS e Execucao',data.osId===pm.environment.get('cancel_os_id') && data.attemptId===pm.environment.get('cancel_attempt_id'));",
+                  "pm.environment.set('cancel_work_version',data.version);pm.environment.set('cancel_initial_work_version',data.version);",
+                  "pm.environment.set('cancel_correlation_id',data.correlationId);pm.environment.set('cancel_saga_id',data.sagaId); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "f6673848-6076-54e9-afee-a7afbb302c82",
+          "name": "06 Cliente nao pode executar diagnostico",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "If-Match",
+                "value": "{{cancel_work_version}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/trabalhos/{{cancel_work_id}}/diagnostico/iniciar",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [403]\", [403].includes(code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "4d4295d9-8d33-558f-8587-c77a05d2a9a8",
+          "name": "07 Iniciar diagnostico",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "If-Match",
+                "value": "{{cancel_work_version}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/trabalhos/{{cancel_work_id}}/diagnostico/iniciar",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mechanic_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Diagnostico iniciado',data.status==='EM_DIAGNOSTICO');pm.environment.set('cancel_work_version',data.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "62358869-1daa-50fa-a6fa-1139ee61b38b",
+          "name": "08 Impedir alteracao com versao antiga",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "If-Match",
+                "value": "{{cancel_initial_work_version}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/trabalhos/{{cancel_work_id}}/diagnostico/concluir",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mechanic_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diagnostico\": \"versao antiga\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [409]\", [409].includes(code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "1485dce2-3121-5bc4-8bf2-b7a4732fee05",
+          "name": "09 Concluir diagnostico",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "If-Match",
+                "value": "{{cancel_work_version}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/trabalhos/{{cancel_work_id}}/diagnostico/concluir",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mechanic_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diagnostico\": \"Troca de oleo e filtro - demonstracao SOAT4\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Diagnostico concluido',data.status==='DIAGNOSTICO_CONCLUIDO');pm.environment.set('cancel_work_version',data.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "1b0fd5b5-bb51-54aa-9ebe-79235632c4c0",
+          "name": "10 Aguardar projecao do diagnostico na OS",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}",
+            "description": "Consistência eventual: o Runner repete esta consulta com limite; Send isolado não encadeia requests.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "",
+                  "check('HTTP de consulta assincrona',code===200 || code===404);",
+                  "const ready=code===200 && (data.status==='EM_COMPOSICAO');",
+                  "const key='poll_'+pm.info.requestId;",
+                  "if (!ready) {",
+                  " const count=Number(pm.environment.get(key)||0)+1;",
+                  " pm.environment.set(key,count);",
+                  " check('Convergencia em ate 90 consultas',count<=90);",
+                  " pm.execution.setNextRequest(pm.info.requestId); setTimeout(function(){},800);",
+                  "} else { pm.environment.unset(key); check('Estado esperado confirmado',true);  }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "d1569a44-6aec-5428-8d98-8c5817023b58",
+          "name": "11.1 Adicionar servico",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cancel_servico_key_1}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}/itens",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"catalogoId\": \"{{service_id}}\",\n  \"tipo\": \"SERVICO\",\n  \"quantidade\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('cancel_servico_key_1',pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Item registrado',Array.isArray(data.itens));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "c2b9411d-6e43-5776-ae65-d7f8a0849373",
+          "name": "12.1 Repetir servico sem duplicar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cancel_servico_key_1}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}/itens",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"catalogoId\": \"{{service_id}}\",\n  \"tipo\": \"SERVICO\",\n  \"quantidade\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Catalogo nao duplicado',data.itens.filter(x=>x.tipo==='SERVICO').length===1);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "e3757df3-ea74-5616-8202-cb63d3600ee5",
+          "name": "11.1 Adicionar insumo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cancel_insumo_key_1}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}/itens",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"catalogoId\": \"{{part_id}}\",\n  \"tipo\": \"INSUMO\",\n  \"quantidade\": 2.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('cancel_insumo_key_1',pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Item registrado',Array.isArray(data.itens));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "4f0eb7fb-51d3-5ffa-9501-fd46df67a587",
+          "name": "12.1 Repetir insumo sem duplicar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{cancel_insumo_key_1}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}/itens",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"catalogoId\": \"{{part_id}}\",\n  \"tipo\": \"INSUMO\",\n  \"quantidade\": 2.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Catalogo nao duplicado',data.itens.filter(x=>x.tipo==='INSUMO').length===1);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "48b0709d-546b-512f-8939-409a8125a4a5",
+          "name": "13.1 Encerrar composicao",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}/composicao/encerrar",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [202]\", [202].includes(code));",
+                  "check('Orcamento identificado',!!data.orcamentoId);pm.environment.set('cancel_budget_id',data.orcamentoId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "62c3c1dd-2604-55aa-9338-0ae351c766b6",
+          "name": "14.1 Repetir encerramento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}/composicao/encerrar",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [202]\", [202].includes(code));",
+                  "check('Mesmo orcamento',data.orcamentoId===pm.environment.get('cancel_budget_id'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "f29e9d11-2f2b-518a-89f7-5cb2bc595294",
+          "name": "15.1 Aguardar Billing e projecao na OS",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}",
+            "description": "Consistência eventual: o Runner repete esta consulta com limite; Send isolado não encadeia requests.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "",
+                  "check('HTTP de consulta assincrona',code===200 || code===404);",
+                  "const ready=code===200 && (data.status==='AGUARDANDO_APROVACAO');",
+                  "const key='poll_'+pm.info.requestId;",
+                  "if (!ready) {",
+                  " const count=Number(pm.environment.get(key)||0)+1;",
+                  " pm.environment.set(key,count);",
+                  " check('Convergencia em ate 90 consultas',count<=90);",
+                  " pm.execution.setNextRequest(pm.info.requestId); setTimeout(function(){},800);",
+                  "} else { pm.environment.unset(key); check('Estado esperado confirmado',true);  }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "13acea6c-f956-520e-a89c-cf9b4a8ddf63",
+          "name": "16.1 Cliente consulta snapshot imutavel",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orcamentos/{{cancel_budget_id}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "",
+                  "check('Contexto preservado no Billing',data.osId===pm.environment.get('cancel_os_id') && data.attemptId===pm.environment.get('cancel_attempt_id'));",
+                  "check('Versao e valores exatos',data.snapshot.orcamentoVersao===1 && data.snapshot.totalCentavos===28625 && data.snapshot.itens.length===2);",
+                  "check('Correlacao entre servicos',data.correlationId===pm.environment.get('cancel_correlation_id'));",
+                  "pm.environment.set('cancel_budget_version',data.version);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "6c06a477-6858-5d26-ae8b-e7b544e3ea1f",
+          "name": "31 Consultar historico de estados",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}/historico",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Historico materializado',Array.isArray(data) && data.length>=3);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "00692d0f-f4f2-5191-9b3c-e7f70469b6c5",
+          "name": "32 Consultar trilha da Saga",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}/saga",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Historico e progresso disponiveis',Array.isArray(data.historico) && Array.isArray(data.progresso));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Compensacao e idempotencia",
+      "description": "",
+      "item": [
+        {
+          "id": "9e658006-d558-5f5d-9238-708604f3d1e4",
+          "name": "01 Cancelar pela OS orquestradora",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}/cancelar",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [202]\", [202].includes(code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "a0be7b1c-d1d5-55f8-bf5f-60a80fcc5e5b",
+          "name": "02 Aguardar compensacao global",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}",
+            "description": "Consistência eventual: o Runner repete esta consulta com limite; Send isolado não encadeia requests.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "",
+                  "check('HTTP de consulta assincrona',code===200 || code===404);",
+                  "const ready=code===200 && (data.status==='COMPENSADA');",
+                  "const key='poll_'+pm.info.requestId;",
+                  "if (!ready) {",
+                  " const count=Number(pm.environment.get(key)||0)+1;",
+                  " pm.environment.set(key,count);",
+                  " check('Convergencia em ate 90 consultas',count<=90);",
+                  " pm.execution.setNextRequest(pm.info.requestId); setTimeout(function(){},800);",
+                  "} else { pm.environment.unset(key); check('Estado esperado confirmado',true);  }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "3d035145-098e-5b2c-9b7c-f033cd2bb7ba",
+          "name": "03 Trabalho tecnico cancelado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/trabalhos/{{cancel_work_id}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{mechanic_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Trabalho cancelado',data.status==='CANCELADO');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "68abb6da-e9b3-535b-a16d-c29566d5bed7",
+          "name": "04 Estoque retornou ao saldo anterior",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/estoques/{{stock_id}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Reversao do estoque',Number(data.quantidade)===Number(pm.environment.get('cancel_stock_before')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "786b7b6e-14ef-5d04-acfc-f766cfbf92fc",
+          "name": "05 Orcamento nao permanece aprovavel",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/orcamentos/{{cancel_budget_id}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Orcamento cancelado',data.state==='CANCELADO');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "699c177c-0e8d-59b6-834b-55ab28f04a29",
+          "name": "06 Repetir cancelamento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}/cancelar",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [202]\", [202].includes(code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "154bc29d-ad56-5922-807c-788247bce88f",
+          "name": "07 Reversao nao se repete",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/estoques/{{stock_id}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Saldo preservado',Number(data.quantidade)===Number(pm.environment.get('cancel_stock_before')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "4d2e4aeb-ca2d-593b-bf08-058a03d6e592",
+          "name": "08 Ler movimentos vinculados a OS",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/estoques/movimentacoes/ordem-servico/{{cancel_os_id}}",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Movimentos auditaveis',Array.isArray(data) && data.length>=2);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "6a7582d2-9aa5-5629-8bb7-2e8885287354",
+          "name": "09 Ler trilha da compensacao",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{traceparent}}"
+              }
+            ],
+            "url": "{{base_url}}/api/v1/ordens-servico/{{cancel_os_id}}/saga",
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function check(name, condition) {",
+                  "  pm.test(name, function () { pm.expect(Boolean(condition)).to.eql(true); });",
+                  "  if (!condition) { pm.execution.setNextRequest(null); throw new Error(name); }",
+                  "}",
+                  "const code = pm.response.code;",
+                  "let data = null;",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "check(\"HTTP esperado [200]\", [200].includes(code));",
+                  "check('Auditoria da Saga',data.historico.length>=1);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
