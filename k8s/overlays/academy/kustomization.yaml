@@ -7,3 +7,6 @@ resources:
 - edge-deployment.yaml
 - edge-service.yaml
 - rds-bootstrap.yaml
+- dependency-priority.yaml
+patches:
+- path: dependency-scheduling.yaml

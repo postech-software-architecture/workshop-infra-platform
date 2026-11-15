@@ -1,0 +1,8 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: workshop-data-dependencies
+value: 1000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: Keep persistent runtime dependencies schedulable in their EBS zone before stateless application replicas.
