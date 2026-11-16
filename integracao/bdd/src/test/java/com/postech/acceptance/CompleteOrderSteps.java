@@ -19,6 +19,7 @@ public class CompleteOrderSteps {
         var uri=java.net.URI.create(url);
         assertTrue("https".equals(uri.getScheme()) || ("http".equals(uri.getScheme()) && Set.of("127.0.0.1","localhost").contains(uri.getHost())), "HTTPS required outside localhost");
         assertTrue(Files.isRegularFile(integration.resolve(".env")), "Configure demo environment first");
+        assertFalse(System.getenv().getOrDefault("SOAT_ACCEPTANCE_RUN_ID", "").isBlank(), "A fresh acceptance run ID is required");
     }
     @When("abro a OS diagnostico rejeito uma proposta e aprovo sua nova versao")
     public void commercialFlow() throws Exception {
@@ -42,6 +43,9 @@ public class CompleteOrderSteps {
     public void delivered() {
         assertTrue(completed.path("passed").asBoolean());
         assertEquals("ENTREGUE", completed.path("state").asText());
+        assertEquals("REAL_TEST_PROVIDER", completed.path("proofKind").asText());
+        assertTrue(completed.path("financialAfter").path("testSellerVerified").asBoolean());
+        assertEquals(commercial.path("runId").asText(), completed.path("runId").asText());
         for (String field: List.of("osId","attemptId","trabalhoId")) {
             assertFalse(commercial.path(field).asText().isBlank());
             assertEquals(commercial.path(field),completed.path(field),field);
@@ -52,6 +56,7 @@ public class CompleteOrderSteps {
         command.add(System.getenv().getOrDefault("PYTHON", "python"));
         command.add(integration.resolve(script).toString());
         command.add("--base-url"); command.add(url); command.addAll(List.of(args));
+        command.add("--api-layout"); command.add(System.getenv().getOrDefault("SOAT_API_LAYOUT", "public"));
         Path evidence = integration.resolve("evidencias").resolve(report);
         Files.deleteIfExists(evidence); // Explicit generated report, never a source/config file.
         Path log=Files.createTempFile(Path.of("target"),"acceptance-",".log");
@@ -60,7 +65,9 @@ public class CompleteOrderSteps {
             assertTrue(process.waitFor(seconds,TimeUnit.SECONDS), "Acceptance timeout; inspect local log " + log);
             assertEquals(0,process.exitValue(),"Acceptance failed; inspect local log " + log);
             assertTrue(Files.isRegularFile(evidence),"Missing fresh acceptance evidence");
-            return json.readTree(Files.readString(evidence));
+            JsonNode result = json.readTree(Files.readString(evidence));
+            assertEquals(System.getenv("SOAT_ACCEPTANCE_RUN_ID"), result.path("runId").asText(), "Evidence belongs to another run");
+            return result;
         } finally { if(process.isAlive()) process.destroyForcibly(); }
     }
 }

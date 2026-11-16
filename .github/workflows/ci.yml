@@ -5,6 +5,19 @@ name: platform-ci
 permissions:
   contents: read
 jobs:
+  bdd-contract:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+        cache: maven
+        cache-dependency-path: integracao/bdd/pom.xml
+    - name: Compile BDD and check step bindings only - NOT a real acceptance run
+      working-directory: integracao/bdd
+      run: mvn -B -ntp -Dcucumber.execution.dry-run=true test
   verify:
     runs-on: ubuntu-latest
     steps:

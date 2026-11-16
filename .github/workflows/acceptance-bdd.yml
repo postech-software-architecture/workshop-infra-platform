@@ -1,0 +1,90 @@
+name: Complete BDD - real test payment
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Digite EXECUTAR BDD REAL somente com comprador de teste pronto
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: academy-acceptance-bdd
+  cancel-in-progress: false
+jobs:
+  acceptance:
+    if: github.ref == 'refs/heads/main'
+    environment: prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SOAT_BASE_URL: ${{ vars.PUBLIC_API_BASE_URL || 'https://rnwyojgeaa.execute-api.us-east-1.amazonaws.com/prod' }}
+      SOAT_API_LAYOUT: public
+      SOAT_E2E_ENABLED: 'true'
+      SOAT_ACCEPTANCE_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate explicit real-test confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: test "$CONFIRMATION" = 'EXECUTAR BDD REAL'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: integracao/bdd/pom.xml
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile acceptance before creating any order
+        working-directory: integracao/bdd
+        run: mvn -B -ntp -DskipTests package
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      - uses: azure/setup-kubectl@v4
+      - name: Select existing Academy cluster
+        env:
+          CLUSTER: ${{ vars.EKS_CLUSTER_NAME }}
+        run: |
+          test -n "$CLUSTER"
+          aws eks update-kubeconfig --name "$CLUSTER"
+      - name: Read existing demo credential privately and record deployed versions
+        env:
+          MP_ACCESS_TOKEN: ${{ secrets.MP_ACCESS_TOKEN }}
+          MP_SELLER_ID: ${{ secrets.MP_SELLER_ID }}
+          MP_APPLICATION_ID: ${{ secrets.MP_APPLICATION_ID }}
+        run: python ops/bdd_runner.py prepare
+      - name: Verify API and test seller without creating an order
+        run: python integracao/verify-phase3.py --base-url "$SOAT_BASE_URL" --preflight
+      - name: Start Cucumber and expose only the new order IDs
+        run: python ops/bdd_runner.py start
+      - name: Publish payment readiness - IDs only
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdd-payment-ready
+          path: integracao/evidencias/payment-ready.json
+          retention-days: 1
+          if-no-files-found: error
+      - name: Wait for buyer payment and complete the same order
+        run: python ops/bdd_runner.py finish
+      - name: Publish acceptance reports and sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdd-complete-reports
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            integracao/bdd/target/cucumber.html
+            integracao/bdd/target/cucumber.json
+            integracao/bdd/target/surefire-reports/TEST-*.xml
+            integracao/bdd/target/acceptance-*.log
+            integracao/evidencias/*.json
+      - name: Remove private runner configuration
+        if: always()
+        run: rm -f integracao/.env
