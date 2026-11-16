@@ -1,15 +1,15 @@
 {
   "repositories": {
-    "os": null,
-    "billing": null,
-    "execution": null
+    "os": "https://github.com/postech-software-architecture/workshop-os-service",
+    "billing": "https://github.com/postech-software-architecture/workshop-billing-service",
+    "execution": "https://github.com/postech-software-architecture/workshop-execution-service"
   },
   "video": null,
-  "verified_remote_protection": false,
-  "verified_real_integration": false,
-  "verified_mercado_pago_test_account": false,
-  "verified_compensation": false,
-  "verified_cloud_rollout": false,
+  "verified_remote_protection": true,
+  "verified_real_integration": true,
+  "verified_mercado_pago_test_account": true,
+  "verified_compensation": true,
+  "verified_cloud_rollout": true,
   "expected_participants": 5,
-  "verified_complete_bdd": false
+  "verified_complete_bdd": true
 }

@@ -1,85 +1,73 @@
 {
-  "date": "2026-11-07",
-  "scope": "Desenvolvimento local ate a fase 5; provas externas pendentes",
+  "date": "2026-11-15",
+  "scope": "CI das imagens implantadas, integração real de teste e BDD completo no Academy",
   "docker_started": false,
-  "cloud_applied": false,
-  "real_provider_calls": false,
+  "docker_local_required": false,
+  "cloud_applied": true,
+  "real_provider_calls": true,
   "services": {
     "os": {
-      "tests": 377,
+      "tests": 387,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
       "coverage": {
-        "INSTRUCTION": 79.22,
-        "BRANCH": 71.84,
-        "LINE": 80.23,
-        "COMPLEXITY": 71.37,
-        "METHOD": 81.98,
-        "CLASS": 95.51
+        "INSTRUCTION": 81.3352,
+        "BRANCH": 72.7829,
+        "LINE": 83.3052,
+        "COMPLEXITY": 72.7977,
+        "METHOD": 83.6218,
+        "CLASS": 95.5128
       },
-      "bdd_scenarios": 1,
       "build": "PASS",
       "coverage_gate": "PASS",
-      "spotbugs_high_findings": 0
+      "spotbugs_high_findings": 0,
+      "deployed_commit": "b950ca97ca4e6d0800054f27cbb9af792f26d390"
     },
     "billing": {
-      "tests": 102,
+      "tests": 111,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
       "coverage": {
-        "INSTRUCTION": 85.01,
-        "BRANCH": 66.44,
-        "LINE": 82.11,
-        "COMPLEXITY": 55.81,
-        "METHOD": 89.76,
+        "INSTRUCTION": 88.0524,
+        "BRANCH": 69.9174,
+        "LINE": 85.4283,
+        "COMPLEXITY": 59.5937,
+        "METHOD": 91.6031,
         "CLASS": 100.0
       },
-      "bdd_scenarios": 1,
       "build": "PASS",
       "coverage_gate": "PASS",
-      "spotbugs_high_findings": 0
+      "spotbugs_high_findings": 0,
+      "deployed_commit": "b34c55057797de8b5f8a64e63c69074494bf4c64"
     },
     "execution": {
-      "tests": 76,
+      "tests": 77,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
       "coverage": {
-        "INSTRUCTION": 90.59,
-        "BRANCH": 77.19,
-        "LINE": 86.88,
-        "COMPLEXITY": 69.93,
-        "METHOD": 87.63,
+        "INSTRUCTION": 90.6522,
+        "BRANCH": 77.4566,
+        "LINE": 86.9485,
+        "COMPLEXITY": 70.2509,
+        "METHOD": 87.7551,
         "CLASS": 100.0
       },
-      "bdd_scenarios": 1,
       "build": "PASS",
       "coverage_gate": "PASS",
-      "spotbugs_high_findings": 0
+      "spotbugs_high_findings": 0,
+      "deployed_commit": "1ca986446bf684a243e444ad20dfccb7a2cd9e0d"
     }
   },
-  "support": {
-    "auth": {
-      "tests": 15,
-      "failures": 0,
-      "errors": 0,
-      "skipped": 0,
-      "build": "PASS",
-      "persistence": "HTTP; sem driver/conexao JDBC"
-    }
+  "complete_bdd": {
+    "verified": true,
+    "scenarios": 1,
+    "steps": 5,
+    "dry_run": false,
+    "workflow_run": 43780849850
   },
-  "static_checks": {
-    "kustomize": "PASS_LOCAL_RENDER",
-    "kubernetes_objects": 41,
-    "terraform": "PASS_FMT_ONLY",
-    "message_contracts": "MATCH",
-    "producer_topic_permissions": "PASS",
-    "python_syntax": "PASS",
-    "auth_no_jdbc": "PASS",
-    "cloud_apply": "NOT_RUN"
-  },
-  "tests_total_services": 555,
-  "tests_total_including_auth": 570
+  "video": null,
+  "institutional_pdf_generated": false
 }
