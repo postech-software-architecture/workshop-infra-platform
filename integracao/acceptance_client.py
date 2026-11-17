@@ -71,10 +71,10 @@ class Client:
         return self.api('POST', '/api/auth/cpf', body={'cpf': '12345678909'})['accessToken']
 
 
-def provider_get(path, token):
+def provider_get(path, token, base_url='https://api.mercadopago.com'):
     if not token:
         raise RuntimeError('MP_ACCESS_TOKEN is required')
-    request = urllib.request.Request('https://api.mercadopago.com' + path,
+    request = urllib.request.Request(base_url + path,
         headers={'Authorization': 'Bearer ' + token, 'Accept': 'application/json'})
     try:
         with urllib.request.urlopen(request, timeout=20) as response:

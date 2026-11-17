@@ -1,0 +1,10 @@
+# Opcional, somente local: envia traces, métricas e logs do stack ao New Relic (marcados deployment.environment=local).
+# Requer NEW_RELIC_LICENSE_KEY (INGEST - LICENSE) no .env. Os logs são lidos dos arquivos do Docker, como no coletor do cluster.
+services:
+  otel:
+    user: 0:0  # leitura de /var/lib/docker/containers (root na VM do Docker/Colima)
+    environment:
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?Configure NEW_RELIC_LICENSE_KEY in .env first}
+    volumes:
+    - ./otel-newrelic.yaml:/etc/otel.yaml:ro
+    - /var/lib/docker/containers:/var/lib/docker/containers:ro
