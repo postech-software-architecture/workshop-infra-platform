@@ -9,6 +9,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
+from urllib.parse import urlparse
 from acceptance_client import Client, settings, verify_test_seller, wait_for, provider_get
 
 BASE = Path(__file__).resolve().parent
@@ -24,7 +25,12 @@ def main():
     password = config.get('DEMO_PASSWORD')
     client = Client(args.base_url, args.api_layout)
     api = client.api
-    proof = verify_test_seller(config)
+    # MP_BASE_URL points the provider proof at the local Orders API mock (compose.payments-mock.yml), as in verify-phase4.py.
+    provider_url = config.get('MP_BASE_URL', 'https://api.mercadopago.com').rstrip('/')
+    real_provider = provider_url == 'https://api.mercadopago.com'
+    if not real_provider and (args.api_layout != 'edge' or urlparse(provider_url).hostname not in ('127.0.0.1', 'localhost')):
+        raise SystemExit('Mock provider is only accepted on localhost with --api-layout edge')
+    proof = verify_test_seller(config) if real_provider else {'testSellerVerified': False}
     admin = client.staff('demo-admin', password)
     mechanic = client.staff('demo-mecanico', password)
     customer = client.customer(password)
@@ -86,7 +92,7 @@ def main():
     assert payment['pagamento']['budgetId'] == second['id']
     assert payment['pagamento']['attemptId'] == current['attemptId']
     financial = payment['pagamento']
-    resource = provider_get('/v1/orders/' + financial['providerOrderId'], config['MP_ACCESS_TOKEN'])
+    resource = provider_get('/v1/orders/' + financial['providerOrderId'], config['MP_ACCESS_TOKEN'], provider_url)
     assert resource['id'] == financial['providerOrderId'] and resource['type'] == 'qr'
     assert str(resource['user_id']) == str(config['MP_SELLER_ID'])
     assert str(resource['integration_data']['application_id']) == str(config['MP_APPLICATION_ID'])

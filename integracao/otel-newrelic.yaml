@@ -1,0 +1,34 @@
+# Opcional, somente local: coletor envia traces/métricas (OTLP) e logs dos containers ao New Relic. Ativado por compose.newrelic.yml.
+receivers:
+  otlp:
+    protocols:
+      grpc: {endpoint: "0.0.0.0:4317"}
+      http: {endpoint: "0.0.0.0:4318"}
+  # Logs: serviços escrevem ECS JSON no stdout; lemos os arquivos do Docker (equivalente ao coletor do cluster).
+  filelog:
+    include: [/var/lib/docker/containers/*/*-json.log]
+    start_at: beginning
+    operators:
+      - {type: json_parser, parse_from: body, timestamp: {parse_from: attributes.time, layout_type: gotime, layout: "2006-01-02T15:04:05.999999999Z07:00"}}
+      - {type: filter, expr: 'not (attributes.log matches "^\\{.*\"service\\.name\".*")'}
+      - {type: json_parser, parse_from: attributes.log}
+      - {type: move, from: 'attributes["service.name"]', to: 'resource["service.name"]'}
+      - {type: severity_parser, parse_from: 'attributes["log.level"]'}
+      # Correlação log <-> trace: preenche o trace context do log a partir do MDC traceId/spanId.
+      - {type: trace_parser, trace_id: {parse_from: attributes.traceId}, span_id: {parse_from: attributes.spanId}}
+      - {type: move, from: attributes.message, to: body}
+      - {type: remove, field: attributes.log}
+processors:
+  batch: {}
+  resource:
+    attributes:
+      - {key: deployment.environment, value: local, action: upsert}
+exporters:
+  otlphttp/newrelic:
+    endpoint: https://otlp.nr-data.net
+    headers: {api-key: "${env:NEW_RELIC_LICENSE_KEY}"}
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [resource, batch], exporters: [otlphttp/newrelic]}
+    metrics: {receivers: [otlp], processors: [resource, batch], exporters: [otlphttp/newrelic]}
+    logs: {receivers: [filelog], processors: [resource, batch], exporters: [otlphttp/newrelic]}

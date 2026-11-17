@@ -12,7 +12,7 @@ import urllib.error
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'integracao'))
-from acceptance_client import ApiError, Client, settings, verify_test_seller, wait_for
+from acceptance_client import ApiError, Client, provider_get, settings, verify_test_seller, wait_for
 
 spec = importlib.util.spec_from_file_location('bdd_runner', ROOT / 'ops/bdd_runner.py')
 runner = importlib.util.module_from_spec(spec)
@@ -61,6 +61,16 @@ class PublicAuthenticationTest(unittest.TestCase):
     def test_auth_failure_is_not_hidden_by_async_polling(self):
         with self.assertRaisesRegex(ApiError, '401'):
             wait_for('projection', lambda: (_ for _ in ()).throw(ApiError('GET', '/work', 401)), lambda v:False)
+
+    def test_provider_read_uses_official_endpoint_unless_base_url_is_given(self):
+        seen = []
+        def fake_urlopen(request, timeout):
+            seen.append(request.full_url)
+            return io.BytesIO(b'{}')
+        with patch('acceptance_client.urllib.request.urlopen', fake_urlopen):
+            provider_get('/v1/orders/ORD1', 'token')
+            provider_get('/v1/orders/ORD1', 'token', 'http://127.0.0.1:18090')
+        self.assertEqual(seen, ['https://api.mercadopago.com/v1/orders/ORD1', 'http://127.0.0.1:18090/v1/orders/ORD1'])
 
     def test_real_buyer_seller_proof_rejects_non_test_profile_or_wrong_owner(self):
         config = {'MP_ACCESS_TOKEN': 'private-token', 'MP_SELLER_ID': '42', 'MP_APPLICATION_ID': 'app'}
